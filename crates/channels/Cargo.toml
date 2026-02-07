@@ -1,0 +1,43 @@
+[package]
+name = "clanker-channels"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# Workspace dependencies
+clanker-core = { path = "../core" }
+
+# Async runtime
+tokio = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Tracing
+tracing = { workspace = true }
+
+# Async traits
+async-trait = { workspace = true }
+
+# Telegram
+teloxide = { version = "0.12", features = ["macros"], optional = true }
+
+# Discord
+serenity = { version = "0.12", default-features = false, features = ["client", "gateway", "rustls_backend", "model"], optional = true }
+
+[features]
+default = ["telegram", "discord"]
+telegram = ["teloxide"]
+discord = ["serenity"]
+
+[dev-dependencies]
+tokio-test = { workspace = true }
+mockito = "1.4"

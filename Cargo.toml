@@ -1,0 +1,67 @@
+[workspace]
+members = [
+    "crates/*",
+]
+resolver = "2"
+
+[workspace.package]
+name = "open-clanker"
+version = "1.0.0"
+edition = "2021"
+authors = ["Open Clanker Contributors"]
+license = "MIT"
+repository = "https://github.com/openclaw/open-clanker"
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1.49", features = ["full"] }
+tokio-util = { version = "0.7", features = ["codec"] }
+# Async utilities
+futures = "0.3"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+
+# Web framework
+axum = { version = "0.8", features = ["ws", "macros", "multipart"] }
+tower = { version = "0.5", features = ["full"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "compression-gzip", "limit"] }
+hyper = { version = "1.8", features = ["full"] }
+
+# HTTP client
+reqwest = { version = "0.12", features = ["json"] }
+
+# Database
+rusqlite = { version = "0.33", features = ["bundled"] }
+
+# Workspace crates
+clanker-config = { path = "./crates/config" }
+clanker-core = { path = "./crates/core" }
+
+# Utilities
+anyhow = "1.0"
+thiserror = "2.0"
+async-stream = "0.3"
+futures-util = "0.3"
+uuid = { version = "1.20", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+# Tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing-appender = "0.2"
+
+# Async traits
+async-trait = "0.1"
+
+# CLI
+clap = { version = "4.5", features = ["derive", "env"] }
+colored = "2"
+
+# Testing
+tokio-test = "0.4"
+tempfile = "3"
+wiremock = "0.6"
+        mockito = "1.4"
