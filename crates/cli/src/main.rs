@@ -1,3 +1,4 @@
+mod onboard;
 mod tui;
 
 use clap::{Parser, Subcommand};
@@ -68,11 +69,20 @@ enum Commands {
         #[arg(short, long, value_name = "PORT", default_value = "18789")]
         port: u16,
     },
+    Onboard {
+        #[arg(short, long, value_name = "FILE", default_value = "config.toml")]
+        config: PathBuf,
+        #[arg(long, value_name = "FILE", default_value = ".env")]
+        env_file: PathBuf,
+    },
     Version,
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // Load .env from current directory (for gateway, config-validate, etc.)
+    dotenvy::dotenv().ok();
+
     let cli = Cli::parse();
 
     // Skip logging setup for TUI - it takes over the terminal
@@ -88,6 +98,7 @@ async fn main() -> anyhow::Result<()> {
         Some(Commands::Send { message, channel, chat_id }) => cmd_send(message, channel, chat_id).await,
         Some(Commands::Status { detailed }) => cmd_status(detailed).await,
         Some(Commands::Tui { host, port }) => cmd_tui(host, port).await,
+        Some(Commands::Onboard { config, env_file }) => cmd_onboard(config, env_file).await,
         Some(Commands::Version) => cmd_version().await,
         None => { print_welcome(); Ok(()) }
     }
@@ -181,6 +192,31 @@ async fn cmd_status(_detailed: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
+async fn cmd_onboard(config: PathBuf, env_file: PathBuf) -> anyhow::Result<()> {
+    if config.exists() {
+        let overwrite = dialoguer::Confirm::new()
+            .with_prompt("config.toml already exists. Overwrite?")
+            .default(false)
+            .interact()?;
+        if !overwrite {
+            println!("Aborted.");
+            return Ok(());
+        }
+    }
+    if env_file.exists() {
+        let overwrite = dialoguer::Confirm::new()
+            .with_prompt(".env already exists. Overwrite?")
+            .default(false)
+            .interact()?;
+        if !overwrite {
+            println!("Aborted.");
+            return Ok(());
+        }
+    }
+    crate::onboard::run_onboard(&config, &env_file)?;
+    Ok(())
+}
+
 async fn cmd_tui(host: String, port: u16) -> anyhow::Result<()> {
     println!("Connecting to gateway at {}:{}...", host, port);
     println!("Press 'q' or Esc to quit.");
@@ -196,7 +232,8 @@ async fn cmd_version() -> anyhow::Result<()> {
 
 fn print_welcome() {
     println!("Open Clanker AI Assistant Gateway");
-    println!("Commands: config-generate, config-validate, gateway, send, status, tui, version");
+    println!("Commands: onboard, config-generate, config-validate, gateway, send, status, tui, version");
     println!();
-    println!("  tui  - Launch TUI client (requires gateway running: open-clanker gateway)");
+    println!("  onboard - Interactive setup wizard (API keys, Telegram, Discord)");
+    println!("  tui     - Launch TUI client (requires gateway running: open-clanker gateway)");
 }

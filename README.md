@@ -83,6 +83,7 @@ It connects multiple AI providers with various messaging platforms, delivering l
 ### Core Features ⚡
 
 - **🌐 Gateway Server**: WebSocket + HTTP for real-time communication
+- **🎯 Onboarding Wizard**: Interactive setup for API keys (Claude, OpenAI, Grok, Groq), Telegram, Discord
 - **🖥️ TUI Client**: Terminal UI for live gateway status and events (connects to running gateway)
 - **💻 CLI Interface**: Full command-line for management
 - **⚙️ TOML Configuration**: Easy setup with environment overrides
@@ -172,7 +173,17 @@ cargo install --path crates/cli
 
 ### Configuration
 
-Create your configuration file:
+**Quick setup (recommended):**
+
+```bash
+# Interactive onboarding wizard — prompts for API keys, Telegram, Discord
+open-clanker onboard
+
+# Then run:
+source .env && open-clanker gateway
+```
+
+**Manual setup:**
 
 ```bash
 # Copy example config
@@ -218,8 +229,11 @@ format = "json"
 ### Running Open Clanker
 
 ```bash
+# First-time setup (interactive wizard)
+open-clanker onboard
+
 # Start the gateway server (in one terminal)
-open-clanker gateway
+source .env && open-clanker gateway
 
 # Launch TUI client (in another terminal - connects to running gateway)
 open-clanker tui                # default: 127.0.0.1:18789

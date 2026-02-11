@@ -29,6 +29,8 @@ ratatui = { workspace = true }
 crossterm = { workspace = true }
 tokio-tungstenite = { workspace = true, features = ["native-tls"] }
 futures-util = { workspace = true }
+dialoguer = { workspace = true }
+dotenvy = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"
