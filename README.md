@@ -181,6 +181,10 @@ cp config-examples/config.toml config.toml
 nano config.toml
 ```
 
+**Required environment variables** (set before `config-validate` or `gateway`):
+- `OPENCLAW_ANTHROPIC_API_KEY` (if provider = anthropic)
+- `OPENCLAW_TELEGRAM_BOT_TOKEN` / `OPENCLAW_DISCORD_BOT_TOKEN` (for channels)
+
 ### Configuration Example
 
 ```toml

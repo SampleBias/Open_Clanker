@@ -4,6 +4,7 @@ use std::str::FromStr;
 
 use clanker_config::generate_default_config;
 use clanker_gateway::GatewayServer;
+use tokio_util::sync::CancellationToken;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -43,7 +44,7 @@ enum Commands {
     Gateway {
         #[arg(short, long, value_name = "FILE")]
         config: Option<PathBuf>,
-        #[arg(short, long, value_name = "HOST")]
+        #[arg(long, value_name = "HOST")]
         host: Option<String>,
         #[arg(short, long, value_name = "PORT")]
         port: Option<u16>,
@@ -119,6 +120,39 @@ async fn cmd_config_validate(config_path: Option<PathBuf>) -> anyhow::Result<()>
 }
 
 async fn cmd_gateway(config_path: Option<PathBuf>, host: Option<String>, port: Option<u16>) -> anyhow::Result<()> {
+    let config_path = config_path.unwrap_or_else(|| PathBuf::from("config.toml"));
+    if !config_path.exists() {
+        eprintln!("Configuration file not found: {}", config_path.display());
+        eprintln!("Generate one with: open-clanker config-generate");
+        return Err(anyhow::anyhow!("Configuration file not found"));
+    }
+
+    let mut config = clanker_config::Config::load_from_path(&config_path)
+        .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
+
+    config.load_env().map_err(|e| anyhow::anyhow!("Failed to load env: {}", e))?;
+
+    // Apply CLI overrides for host/port
+    if let Some(h) = host {
+        config.server.host = h;
+    }
+    if let Some(p) = port {
+        config.server.port = p;
+    }
+
+    config.validate().map_err(|e| anyhow::anyhow!("Config validation failed: {}", e))?;
+
+    let shutdown_token = CancellationToken::new();
+    let server = GatewayServer::new(config, shutdown_token.clone());
+
+    let addr = server.address();
+    println!("Starting Open Clanker Gateway on http://{}", addr);
+    println!("  WebSocket: ws://{}/ws", addr);
+    println!("  Health:   http://{}/health", addr);
+    println!("Press Ctrl+C to stop.");
+
+    server.start().await.map_err(|e| anyhow::anyhow!("Gateway error: {}", e))?;
+
     Ok(())
 }
 
