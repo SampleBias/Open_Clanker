@@ -4,6 +4,7 @@ use crate::groq::GroqAgent;
 use crate::openai::OpenAIAgent;
 use crate::types::Agent;
 use clanker_config::AgentConfig;
+use std::sync::Arc;
 use tracing::{debug, info};
 
 /// Agent factory for creating provider-specific agents
@@ -39,6 +40,17 @@ impl AgentFactory {
                 debug!("Unknown provider, using placeholder agent");
                 Box::new(crate::placeholder::PlaceholderAgent::new(config))
             }
+        }
+    }
+
+    /// Create an arc-wrapped agent for shared ownership (e.g. gateway state)
+    pub fn create_arc_from_config(config: AgentConfig) -> Arc<dyn Agent + Send + Sync> {
+        match config.provider.to_lowercase().as_str() {
+            "anthropic" => Arc::new(AnthropicAgent::new(config)),
+            "openai" => Arc::new(OpenAIAgent::new(config)),
+            "grok" => Arc::new(GrokAgent::new(config)),
+            "groq" => Arc::new(GroqAgent::new(config)),
+            _ => Arc::new(crate::placeholder::PlaceholderAgent::new(config)),
         }
     }
 

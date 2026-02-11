@@ -33,6 +33,7 @@ pub mod telegram;
 pub mod discord;
 
 use clanker_core::ChannelType;
+use std::sync::Arc;
 
 // Re-exports
 pub use error::{ChannelError, Result};
@@ -45,6 +46,13 @@ pub trait Channel: Send + Sync {
 
     /// Listen for incoming messages (blocking)
     async fn listen(&self) -> Result<()>;
+
+    /// Listen for incoming messages and forward to sender (for gateway integration).
+    /// Does not echo; messages are sent to `tx` for processing.
+    async fn listen_with_tx(
+        &self,
+        tx: tokio::sync::mpsc::Sender<clanker_core::Message>,
+    ) -> Result<()>;
 
     /// Get the channel type
     fn channel_type(&self) -> ChannelType;
@@ -64,11 +72,25 @@ impl ChannelFactory {
             .map(|ch| Box::new(ch) as Box<dyn Channel>)
     }
 
+    /// Create an Arc-wrapped Telegram channel (for shared ownership in gateway)
+    #[cfg(feature = "telegram")]
+    pub fn create_arc_telegram(token: String) -> Result<Arc<dyn Channel + Send + Sync>> {
+        let ch = telegram::TelegramChannel::new(token)?;
+        Ok(Arc::new(ch) as Arc<dyn Channel + Send + Sync>)
+    }
+
     /// Create a Discord channel instance
     #[cfg(feature = "discord")]
     pub fn create_discord(token: String) -> Result<Box<dyn Channel>> {
         discord::DiscordChannel::new(token)
             .map(|ch| Box::new(ch) as Box<dyn Channel>)
+    }
+
+    /// Create an Arc-wrapped Discord channel (for shared ownership in gateway)
+    #[cfg(feature = "discord")]
+    pub fn create_arc_discord(token: String) -> Result<Arc<dyn Channel + Send + Sync>> {
+        let ch = discord::DiscordChannel::new(token)?;
+        Ok(Arc::new(ch) as Arc<dyn Channel + Send + Sync>)
     }
 
     /// Create a channel based on channel type

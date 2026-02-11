@@ -72,14 +72,7 @@ impl Config {
             )));
         }
 
-        // Validate at least one channel is configured
-        if self.channels.telegram.is_none() && self.channels.discord.is_none() {
-            return Err(ClankerError::Config(
-                "At least one channel (telegram or discord) must be configured".to_string(),
-            ));
-        }
-
-        // Validate channel configurations
+        // Validate channel configurations (channels optional for WebSocket-only mode)
         if let Some(telegram) = &self.channels.telegram {
             if telegram.bot_token.is_empty() {
                 return Err(ClankerError::Config(
@@ -373,6 +366,7 @@ mod tests {
 
     #[test]
     fn test_config_validation_no_channel() {
+        // No channels is valid (WebSocket-only mode)
         let config = Config {
             server: ServerConfig::default(),
             channels: ChannelsConfig {
@@ -386,7 +380,7 @@ mod tests {
             logging: LoggingConfig::default(),
         };
 
-        assert!(config.validate().is_err());
+        assert!(config.validate().is_ok());
     }
 
     #[test]

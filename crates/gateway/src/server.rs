@@ -1,16 +1,14 @@
 use crate::handlers::{health_check, root, websocket_handler};
 use crate::middleware::{cors_layer, security_headers_middleware};
+use crate::processor;
 use crate::state::AppState;
-use axum::{
-    body::Body,
-    http::{HeaderMap, HeaderValue, Method, Version},
-    response::Response,
-    routing::{any, get, Router},
-};
+use axum::{routing::{any, get, Router}};
 use clanker_config::Config;
+use clanker_core::Message;
 use tokio::net::TcpListener;
+use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
-use tracing::{info};
+use tracing::{error, info, warn};
 
 /// Gateway Server
 pub struct GatewayServer {
@@ -47,6 +45,48 @@ impl GatewayServer {
 
         let app = self.build_router();
         self.setup_graceful_shutdown();
+
+        // Spawn channel listeners and processing loop when channels are configured
+        let state = self.state.clone();
+        if !state.channels().is_empty() {
+            let (tx, mut rx) = mpsc::channel::<Message>(256);
+            let shutdown = state.shutdown_token().clone();
+
+            // Spawn channel listeners
+            for ch in state.channels() {
+                let ch = ch.clone();
+                let tx = tx.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = ch.listen_with_tx(tx).await {
+                        error!("Channel {} listener error: {}", ch.channel_type(), e);
+                    }
+                });
+            }
+
+            // Spawn processing loop
+            let agent = state.agent();
+            tokio::spawn(async move {
+                loop {
+                    tokio::select! {
+                        Some(incoming) = rx.recv() => {
+                            match processor::process_message(agent.as_ref(), &incoming).await {
+                                Ok(response) => {
+                                    if let Some(ch) = state.channel_for(incoming.channel_type) {
+                                        if let Err(e) = ch.send(response).await {
+                                            error!("Failed to send to {}: {}", incoming.channel_type, e);
+                                        }
+                                    } else {
+                                        warn!("No channel for type {:?}", incoming.channel_type);
+                                    }
+                                }
+                                Err(e) => error!("Processor error: {}", e),
+                            }
+                        }
+                        _ = shutdown.cancelled() => break,
+                    }
+                }
+            });
+        }
 
         axum::serve(listener, app)
             .with_graceful_shutdown(async move {

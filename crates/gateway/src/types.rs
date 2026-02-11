@@ -45,11 +45,13 @@ pub enum WsServerMessage {
     Unsubscribed {
         channel_id: String,
     },
-    /// Response to sent message
+    /// Response to sent message (includes AI content when available)
     SendResponse {
         success: bool,
         message_id: Option<String>,
         error: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        content: Option<String>,
     },
     /// Health check response
     Health {
@@ -75,11 +77,17 @@ impl WsServerMessage {
     }
 
     /// Create send response
-    pub fn send_response(success: bool, message_id: Option<String>, error: Option<String>) -> Self {
+    pub fn send_response(
+        success: bool,
+        message_id: Option<String>,
+        error: Option<String>,
+        content: Option<String>,
+    ) -> Self {
         Self::SendResponse {
             success,
             message_id,
             error,
+            content,
         }
     }
 }

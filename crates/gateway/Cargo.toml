@@ -9,9 +9,11 @@ repository.workspace = true
 [dependencies]
 clanker-core = { path = "../core" }
 clanker-config = { path = "../config" }
+clanker-agent = { path = "../agent" }
+clanker-channels = { path = "../channels", default-features = false, features = ["telegram"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
-tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "sync"] }
 tokio-util = { workspace = true, features = ["codec"] }
 axum = { workspace = true, features = ["ws", "macros"] }
 tower = { workspace = true }

@@ -1,5 +1,7 @@
+use crate::processor;
 use crate::state::AppState;
 use anyhow::Result;
+use clanker_core::Message;
 use crate::types::{HealthResponse, WsClientMessage, WsServerMessage};
 use axum::{
     extract::{
@@ -8,7 +10,7 @@ use axum::{
     },
     response::{IntoResponse, Json},
 };
-use axum::extract::ws::{Message, WebSocket, Utf8Bytes};
+use axum::extract::ws::{Message as WsMessage, WebSocket, Utf8Bytes};
 use futures_util::{SinkExt, StreamExt};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
@@ -81,7 +83,7 @@ async fn handle_websocket(socket: WebSocket, state: AppState) {
         uptime_seconds: state.uptime_seconds() as u64,
     };
 
-    if let Err(e) = sender.send(Message::Text(Utf8Bytes::from(serde_json::to_string(&welcome).unwrap()))).await {
+    if let Err(e) = sender.send(WsMessage::Text(Utf8Bytes::from(serde_json::to_string(&welcome).unwrap()))).await {
         error!("Failed to send welcome message: {}", e);
         return;
     }
@@ -98,7 +100,7 @@ async fn handle_websocket(socket: WebSocket, state: AppState) {
 
                             // Send error to client
                             let error_msg = WsServerMessage::error("MESSAGE_ERROR", e.to_string());
-                            let _ = sender.send(Message::Text(Utf8Bytes::from(serde_json::to_string(&error_msg).unwrap()))).await;
+                            let _ = sender.send(WsMessage::Text(Utf8Bytes::from(serde_json::to_string(&error_msg).unwrap()))).await;
                         }
                     }
                     Err(e) => {
@@ -114,7 +116,7 @@ async fn handle_websocket(socket: WebSocket, state: AppState) {
                     Ok(broadcast_msg) => {
                         // Filter messages for this connection's subscriptions
                         if should_send_to_message(&broadcast_msg, &conn_state) {
-                            if let Err(e) = sender.send(Message::Text(Utf8Bytes::from(serde_json::to_string(&broadcast_msg).unwrap()))).await {
+                            if let Err(e) = sender.send(WsMessage::Text(Utf8Bytes::from(serde_json::to_string(&broadcast_msg).unwrap()))).await {
                                 error!("Failed to send broadcast message: {}", e);
                                 break;
                             }
@@ -142,13 +144,13 @@ async fn handle_websocket(socket: WebSocket, state: AppState) {
 
 /// Handle client message
 async fn handle_client_message(
-    msg: Message,
+    msg: WsMessage,
     state: &AppState,
-    sender: &mut futures_util::stream::SplitSink<WebSocket, Message>,
+    sender: &mut futures_util::stream::SplitSink<WebSocket, WsMessage>,
     connection_id: &Uuid,
 ) -> Result<(), anyhow::Error> {
     match msg {
-        Message::Text(text) => {
+        WsMessage::Text(text) => {
             // Parse JSON message
             let client_msg: WsClientMessage = serde_json::from_str(&text)?;
 
@@ -156,7 +158,7 @@ async fn handle_client_message(
                 WsClientMessage::Ping { timestamp } => {
                     // Respond with pong
                     let pong = WsServerMessage::Pong { timestamp };
-                    let _ = sender.send(Message::Text(Utf8Bytes::from(serde_json::to_string(&pong)?))).await;
+                    let _ = sender.send(WsMessage::Text(Utf8Bytes::from(serde_json::to_string(&pong)?))).await;
                 }
 
                 WsClientMessage::Subscribe { channel_id, channel_type } => {
@@ -167,7 +169,7 @@ async fn handle_client_message(
                         channel_id: channel_id.clone(),
                         connection_id: *connection_id,
                     };
-                    let _ = sender.send(Message::Text(Utf8Bytes::from(serde_json::to_string(&sub_msg)?))).await;
+                    let _ = sender.send(WsMessage::Text(Utf8Bytes::from(serde_json::to_string(&sub_msg)?))).await;
                 }
 
                 WsClientMessage::Unsubscribe { channel_id } => {
@@ -177,7 +179,7 @@ async fn handle_client_message(
                     let unsub_msg = WsServerMessage::Unsubscribed {
                         channel_id: channel_id.clone(),
                     };
-                    let _ = sender.send(Message::Text(Utf8Bytes::from(serde_json::to_string(&unsub_msg)?))).await;
+                    let _ = sender.send(WsMessage::Text(Utf8Bytes::from(serde_json::to_string(&unsub_msg)?))).await;
                 }
 
                 WsClientMessage::SendMessage { channel_id, channel_type, message } => {
@@ -186,23 +188,48 @@ async fn handle_client_message(
                     // Increment message count
                     state.increment_message_count();
 
-                    // Send response
-                    let response = WsServerMessage::send_response(true, None, None);
-                    let _ = sender.send(Message::Text(Utf8Bytes::from(serde_json::to_string(&response)?))).await;
+                    // Build incoming message and process through agent
+                    let incoming = Message::new(
+                        channel_type,
+                        channel_id.clone(),
+                        "user".to_string(),
+                        message,
+                    );
+
+                    match processor::process_message(state.agent().as_ref(), &incoming).await {
+                        Ok(response_msg) => {
+                            let response = WsServerMessage::send_response(
+                                true,
+                                Some(response_msg.id.clone()),
+                                None,
+                                Some(response_msg.text),
+                            );
+                            let _ = sender.send(WsMessage::Text(Utf8Bytes::from(serde_json::to_string(&response)?))).await;
+                        }
+                        Err(e) => {
+                            let response = WsServerMessage::send_response(
+                                false,
+                                None,
+                                Some(e),
+                                None,
+                            );
+                            let _ = sender.send(WsMessage::Text(Utf8Bytes::from(serde_json::to_string(&response)?))).await;
+                        }
+                    }
                 }
             }
         }
 
-        Message::Close(frame) => {
+        WsMessage::Close(frame) => {
             info!("Client {} requested close: {:?}", connection_id, frame);
         }
 
-        Message::Ping(data) => {
+        WsMessage::Ping(data) => {
             // Respond with pong
-            let _ = sender.send(Message::Pong(data)).await;
+            let _ = sender.send(WsMessage::Pong(data)).await;
         }
 
-        Message::Pong(_) => {
+        WsMessage::Pong(_) => {
             // Pong received, ignore
         }
 

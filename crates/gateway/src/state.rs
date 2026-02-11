@@ -1,8 +1,10 @@
 use crate::broadcast::MessageBroadcaster;
+use crate::processor;
 use crate::types::{ConnectionId, ConnectionState};
 use clanker_config::Config;
+use clanker_core::ChannelType;
 use std::collections::HashMap;
-use std::net::SocketAddr;
+use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -117,15 +119,33 @@ impl AppState {
     pub fn server_id(&self) -> Uuid {
         self.inner.server_id
     }
+
+    /// Get agent for message processing
+    pub fn agent(&self) -> Arc<dyn clanker_agent::Agent + Send + Sync> {
+        self.inner.agent.clone()
+    }
+
+    /// Get channel by type (for sending responses)
+    pub fn channel_for(&self, channel_type: ChannelType) -> Option<Arc<dyn clanker_channels::Channel + Send + Sync>> {
+        self.inner.channels.iter().find(|c| c.channel_type() == channel_type).cloned()
+    }
+
+    /// Get all channels
+    pub fn channels(&self) -> &[Arc<dyn clanker_channels::Channel + Send + Sync>] {
+        &self.inner.channels
+    }
 }
 
 /// Inner application state
-#[derive(Debug)]
 struct AppStateInner {
     /// Message broadcaster
     broadcaster: MessageBroadcaster,
     /// Application configuration
     config: Config,
+    /// AI agent for message processing
+    agent: Arc<dyn clanker_agent::Agent + Send + Sync>,
+    /// Channel instances for sending responses
+    channels: Vec<Arc<dyn clanker_channels::Channel + Send + Sync>>,
     /// Active connections (connection_id -> connection_state)
     connections: RwLock<HashMap<ConnectionId, ConnectionState>>,
     /// Total messages processed
@@ -138,12 +158,31 @@ struct AppStateInner {
     server_id: Uuid,
 }
 
+impl fmt::Debug for AppStateInner {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AppStateInner")
+            .field("broadcaster", &self.broadcaster)
+            .field("config", &self.config)
+            .field("agent", &format!("<agent: {}>", self.agent.provider()))
+            .field("connections", &"...")
+            .field("total_messages", &self.total_messages.load(Ordering::Relaxed))
+            .field("start_time", &self.start_time)
+            .field("server_id", &self.server_id)
+            .finish()
+    }
+}
+
 impl AppStateInner {
     /// Create new inner state
     fn new(config: Config, shutdown_token: CancellationToken) -> Self {
+        let agent = processor::create_agent(&config);
+        let channels = Self::create_channels_from_config(&config);
+
         Self {
             broadcaster: MessageBroadcaster::new(shutdown_token.clone()),
             config,
+            agent,
+            channels,
             connections: RwLock::new(HashMap::new()),
             total_messages: AtomicU64::new(0),
             start_time: chrono::Utc::now(),
@@ -151,11 +190,31 @@ impl AppStateInner {
             server_id: Uuid::new_v4(),
         }
     }
+
+    /// Create channel instances from config (only when token is non-empty)
+    fn create_channels_from_config(config: &Config) -> Vec<Arc<dyn clanker_channels::Channel + Send + Sync>> {
+        let mut channels = Vec::new();
+
+        if let Some(ref tg) = config.channels.telegram {
+            if !tg.bot_token.is_empty() && tg.bot_token != "your-telegram-bot-token" {
+                match clanker_channels::ChannelFactory::create_arc_telegram(tg.bot_token.clone()) {
+                    Ok(ch) => {
+                        channels.push(ch);
+                        info!("Telegram channel created");
+                    }
+                    Err(e) => tracing::warn!("Failed to create Telegram channel: {}", e),
+                }
+            }
+        }
+
+        channels
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::net::SocketAddr;
 
     fn create_test_config() -> Config {
         toml::from_str(include_str!("../../../config-examples/config.toml")).unwrap()

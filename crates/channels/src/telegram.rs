@@ -64,23 +64,51 @@ impl Channel for TelegramChannel {
     }
 
     async fn listen(&self) -> Result<()> {
-        info!("Starting Telegram listener");
-
-        // Set connected state
+        info!("Starting Telegram listener (legacy echo mode)");
         self.connected.store(true, Ordering::SeqCst);
 
-        // Simple echo handler for testing
         let bot = self.bot.clone();
         teloxide::repl(bot, |bot: Bot, msg: teloxide::types::Message| async move {
-            debug!("Received message from Telegram");
             let text = msg.text().unwrap_or("");
-            info!("Received message: {}", text);
-
-            // Echo back for testing
             bot.send_message(msg.chat.id, format!("Echo: {}", text)).await?;
             Ok(())
         })
         .await;
+
+        Ok(())
+    }
+
+    async fn listen_with_tx(
+        &self,
+        tx: tokio::sync::mpsc::Sender<Message>,
+    ) -> Result<()> {
+        info!("Starting Telegram listener (forwarding to gateway)");
+        self.connected.store(true, Ordering::SeqCst);
+
+        let bot = self.bot.clone();
+        let handler = move |_bot: Bot, msg: teloxide::types::Message| {
+            let tx = tx.clone();
+            async move {
+                let text = msg.text().unwrap_or_default();
+                if text.is_empty() {
+                    return Ok(());
+                }
+                let sender = msg
+                    .from()
+                    .map(|u| u.id.0.to_string())
+                    .unwrap_or_else(|| "unknown".to_string());
+                let core_msg = Message::new(
+                    ChannelType::Telegram,
+                    msg.chat.id.0.to_string(),
+                    sender,
+                    text.to_string(),
+                );
+                let _ = tx.send(core_msg).await;
+                Ok(())
+            }
+        };
+
+        teloxide::repl(bot, handler).await;
 
         Ok(())
     }

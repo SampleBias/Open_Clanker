@@ -34,6 +34,7 @@
 pub mod broadcast;
 pub mod handlers;
 pub mod middleware;
+pub mod processor;
 pub mod server;
 pub mod state;
 pub mod types;

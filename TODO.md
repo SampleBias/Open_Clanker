@@ -1,9 +1,10 @@
 # Open Clanker: Migration TODO List
 
-## Project Status: ✅ MILESTONE ACHIEVED!
+## Project Status: Phase 3A — Gateway Integration
 
 **Started**: 2026-02-06
-**Current Phase**: Phase 2 - Core Infrastructure (Gateway) ✅ COMPLETE!
+**Current Phase**: Phase 3A - Gateway Integration (Agent + Channels) 🔄 IN PROGRESS
+**Previous**: Phase 2 - Core Infrastructure ✅ COMPLETE
 
 ---
 
@@ -246,21 +247,47 @@
 
 ## 📋 Phase 3: Integration & Polish (Week 5-6)
 
+### Phase 3A: Gateway Integration (Agent + Channels) — IN PROGRESS
+
+> **Goal**: Full AI conversation flow: User → Channel → Gateway → Agent → Channel → User
+
+**Reference**: See [GATEWAY_INTEGRATION_PLAN.md](./GATEWAY_INTEGRATION_PLAN.md) for detailed design.
+
+#### A1: Gateway + Agent (WebSocket path)
+- [ ] Add `clanker-agent` to gateway Cargo.toml
+- [ ] Create agent in AppState from config via AgentFactory
+- [ ] Add `processor.rs` module: message → agent.chat() → response conversion
+- [ ] Wire WebSocket SendMessage: receive → process → send AI response back
+- [ ] Test: WebSocket client sends message, receives AI response
+
+#### A2: Channel Integration (Telegram)
+- [ ] Add `clanker-channels` to gateway Cargo.toml
+- [ ] Add `listen_with_tx` (or equivalent) to Channel trait for forwarding messages
+- [ ] Modify Telegram listen: forward to mpsc instead of echo
+- [ ] Gateway: create channels from config, spawn listeners with shared mpsc
+- [ ] Gateway: processing loop: mpsc.recv → agent → channel.send(response)
+- [ ] Test: Telegram message → AI response
+
+#### A3: Polish
+- [ ] Shared processor for WebSocket + channel paths
+- [ ] Error handling, logging, shutdown propagation
+- [ ] Update gateway command to load .env (already done via main)
+
 ### CLI Enhancement
-- [ ] Add `gateway` command integration (✅ Partial - needs gateway completion)
+- [x] Add `gateway` command integration ✅
 - [ ] Add `status` command enhancement
 - [ ] Add `send` command implementation
 - [ ] Implement command execution logic
 - [ ] Add error handling and user-friendly messages
 - [ ] Test all CLI commands
 
-### Gateway Integration
-- [ ] Integrate agent system into gateway
-- [ ] Integrate channel system into gateway
-- [ ] Integrate storage into gateway
-- [ ] Add request routing logic
-- [ ] Add message processing pipeline
-- [ ] Test end-to-end message flow
+### Gateway Integration (Legacy checklist — see Phase 3A)
+- [ ] Integrate agent system into gateway → Phase 3A
+- [ ] Integrate channel system into gateway → Phase 3A
+- [ ] Integrate storage into gateway (deferred)
+- [ ] Add request routing logic → Phase 3A
+- [ ] Add message processing pipeline → Phase 3A
+- [ ] Test end-to-end message flow → Phase 3A
 
 ### Configuration Updates
 - [ ] Add agent provider options to config
@@ -476,10 +503,12 @@
 
 ---
 
-**Last Updated**: 2026-02-06
-**Milestone**: Channels Crate Complete! 🎉
-**Next Task**: Continue Phase 3 - Integration with gateway
+**Last Updated**: 2026-02-11
+**Milestone**: Phase 3A — Gateway Integration (Agent + Channels)
+**Next Task**: A1 - Add agent to gateway, wire WebSocket SendMessage
 **Progress**: Phase 1 - 100% ✅
 **Progress**: Phase 2 - 100% ✅ (Gateway + Agent + Channels)
-**Overall**: 40% complete
-**Total Tests**: 68 passing! ✅ (Phase 1: 20, Phase 2: 23, Agent: 15, Channels: 10)
+**Progress**: Phase 3A - 0% 🔄 (Agent + Channel integration)
+**Overall**: ~45% complete
+**Total Tests**: 68 passing! ✅
+**Reference**: [GATEWAY_INTEGRATION_PLAN.md](./GATEWAY_INTEGRATION_PLAN.md)

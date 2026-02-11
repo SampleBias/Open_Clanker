@@ -53,16 +53,19 @@ impl Channel for DiscordChannel {
 
     async fn listen(&self) -> Result<()> {
         info!("Starting Discord listener");
-
-        // Set connected state
         self.connected.store(true, Ordering::SeqCst);
-
-        // TODO: Implement actual Discord listening
-        // This requires serenity client initialization
         info!("Discord listen not yet fully implemented - placeholder");
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-
         Ok(())
+    }
+
+    async fn listen_with_tx(
+        &self,
+        _tx: tokio::sync::mpsc::Sender<Message>,
+    ) -> Result<()> {
+        Err(ChannelError::UnsupportedChannel(
+            "Discord listen_with_tx not yet implemented".to_string(),
+        ))
     }
 
     fn channel_type(&self) -> ChannelType {
