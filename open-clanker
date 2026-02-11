@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Wrapper to run open-clanker via cargo (no global install needed)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+exec cargo run --release -p clanker-cli -- "$@"
