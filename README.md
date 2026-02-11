@@ -83,6 +83,7 @@ It connects multiple AI providers with various messaging platforms, delivering l
 ### Core Features ⚡
 
 - **🌐 Gateway Server**: WebSocket + HTTP for real-time communication
+- **🖥️ TUI Client**: Terminal UI for live gateway status and events (connects to running gateway)
 - **💻 CLI Interface**: Full command-line for management
 - **⚙️ TOML Configuration**: Easy setup with environment overrides
 - **📝 JSON Logging**: Structured logs with multiple levels
@@ -217,8 +218,12 @@ format = "json"
 ### Running Open Clanker
 
 ```bash
-# Start the gateway server
+# Start the gateway server (in one terminal)
 open-clanker gateway
+
+# Launch TUI client (in another terminal - connects to running gateway)
+open-clanker tui                # default: 127.0.0.1:18789
+open-clanker tui --host 0.0.0.0 --port 18789
 
 # Check status
 open-clanker status

@@ -1,3 +1,5 @@
+mod tui;
+
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -60,13 +62,24 @@ enum Commands {
         #[arg(short, long)]
         detailed: bool,
     },
+    Tui {
+        #[arg(long, value_name = "HOST", default_value = "127.0.0.1")]
+        host: String,
+        #[arg(short, long, value_name = "PORT", default_value = "18789")]
+        port: u16,
+    },
     Version,
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
-    setup_logging(cli.verbose || cli.debug);
+
+    // Skip logging setup for TUI - it takes over the terminal
+    let is_tui = matches!(cli.command, Some(Commands::Tui { .. }));
+    if !is_tui {
+        setup_logging(cli.verbose || cli.debug);
+    }
 
     match cli.command {
         Some(Commands::ConfigGenerate { output, force }) => cmd_config_generate(output, force).await,
@@ -74,6 +87,7 @@ async fn main() -> anyhow::Result<()> {
         Some(Commands::Gateway { config, host, port }) => cmd_gateway(config.or(cli.config), host, port).await,
         Some(Commands::Send { message, channel, chat_id }) => cmd_send(message, channel, chat_id).await,
         Some(Commands::Status { detailed }) => cmd_status(detailed).await,
+        Some(Commands::Tui { host, port }) => cmd_tui(host, port).await,
         Some(Commands::Version) => cmd_version().await,
         None => { print_welcome(); Ok(()) }
     }
@@ -161,9 +175,17 @@ async fn cmd_send(message: String, channel: Option<String>, chat_id: Option<Stri
     Ok(())
 }
 
-async fn cmd_status(detailed: bool) -> anyhow::Result<()> {
+async fn cmd_status(_detailed: bool) -> anyhow::Result<()> {
     println!("Open Clanker Status");
     println!("Version: open-clanker {}", env!("CARGO_PKG_VERSION"));
+    Ok(())
+}
+
+async fn cmd_tui(host: String, port: u16) -> anyhow::Result<()> {
+    println!("Connecting to gateway at {}:{}...", host, port);
+    println!("Press 'q' or Esc to quit.");
+
+    crate::tui::run_tui(&host, port).await?;
     Ok(())
 }
 
@@ -174,5 +196,7 @@ async fn cmd_version() -> anyhow::Result<()> {
 
 fn print_welcome() {
     println!("Open Clanker AI Assistant Gateway");
-    println!("Commands: config-generate, config-validate, gateway, send, status, version");
+    println!("Commands: config-generate, config-validate, gateway, send, status, tui, version");
+    println!();
+    println!("  tui  - Launch TUI client (requires gateway running: open-clanker gateway)");
 }
