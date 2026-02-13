@@ -124,24 +124,24 @@ It connects multiple AI providers with various messaging platforms, delivering l
 ╠═══════════════════════════════════════════════════════════════╣
 ║                                                               ║
 ║  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐        ║
-║  │ clanker-core│────▶│clanker-gate│────▶│  Channels  │        ║
+║  │ clanker-core│───▶│clanker-gate │───▶│  Channels   │        ║
 ║  │  (20 tests) │    │   (23 test) │    │  (10 tests) │        ║
 ║  │             │    │             │    │             │        ║
-║  │ - Types    │    │ - WebSocket │    │ - Telegram │          ║
-║  │ - Errors   │    │ - HTTP      │    │ - Discord  │          ║
-║  │ - Traits   │    │ - Routing   │    │             │         ║
+║  │ - Types     │    │ - WebSocket │    │ - Telegram  │        ║
+║  │ - Errors    │    │ - HTTP      │    │ - Discord   │        ║
+║  │ - Traits    │    │ - Routing   │    │             │        ║
 ║  └─────────────┘    └─────────────┘    └─────────────┘        ║
 ║         │                 │                                   ║
 ║         ▼                 ▼                                   ║
 ║  ┌─────────────┐    ┌─────────────┐                           ║
-║  │clanker-conf│    │clanker-agen│                             ║
+║  │clanker-conf │    │clanker-agen│                            ║
 ║  │  (11 tests) │    │  (15 tests) │                           ║
 ║  │             │    │             │                           ║
 ║  │ - TOML      │    │ - Anthropic │                           ║
 ║  │ - Validation│    │ - OpenAI    │                           ║
 ║  │ - Env Vars  │    │ - Grok      │                           ║
 ║  └─────────────┘    │ - Groq      │                           ║
-║                    └─────────────┘                            ║
+║                     └─────────────┘                           ║
 ║                          │                                    ║
 ║                          ▼                                    ║
 ║                    ┌─────────────┐                            ║
@@ -334,17 +334,17 @@ cargo test --workspace -- --nocapture
 
 ```
     ╔═══════════════════════════════════════════════════════╗
-    ║                                                           ║
-    ║         ⭐  STAR THE REPOSITORY  ⭐                     ║
-    ║                                                           ║
-    ║   Help Clankerville grow by starring this repo!          ║
-    ║                                                           ║
-    ║   https://github.com/SampleBias/Open_Clanker           ║
-    ║                                                           ║
-    ║   Every star counts in Clankerville! 🌟                  ║
-    ║                                                           ║
-    ║           Spawned from S4MPL3BI4S 🌟                      ║
-    ║                                                           ║
+    ║                                                       ║
+    ║         ⭐  STAR THE REPOSITORY  ⭐                   ║
+    ║                                                       ║
+    ║   Help Clankerville grow by starring this repo!       ║
+    ║                                                       ║
+    ║   https://github.com/SampleBias/Open_Clanker          ║
+    ║                                                       ║
+    ║   Every star counts in Clankerville! 🌟               ║
+    ║                                                       ║
+    ║           Spawned from S4MPL3BI4S 🌟                  ║
+    ║                                                       ║
     ╚═══════════════════════════════════════════════════════╝
 ```
 
@@ -448,14 +448,7 @@ Open Clanker was spawned from the digital realm of **S4MPL3BI4S**, designed to b
            ____|_________|____
           /                   \  
 
-                       88                              
-                       88                       ,d     
-                       88                       88     
-8b,dPPYba,  ,adPPYba,  88,dPPYba,   ,adPPYba, MM88MMM  
-88P'   "Y8 a8"     "8a 88P'    "8a a8"     "8a  88     
-88         8b       d8 88       d8 8b       d8  88     
-88         "8a,   ,a8" 88b,   ,a8" "8a,   ,a8"  88,    
-88          `"YbbdP"'  8Y"Ybbd8"'   `"YbbdP"'   "Y888  
+
 
         🤖 Open Clanker — High-Performance AI Assistant
         Spawned from S4MPL3BI4S | Built with Rust
