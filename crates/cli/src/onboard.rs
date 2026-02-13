@@ -49,8 +49,8 @@ pub fn run_onboard(config_path: &Path, env_path: &Path) -> Result<()> {
     println!();
     println!("╔══════════════════════════════════════════════════════════╗");
     println!("║           Open Clanker — Setup Wizard                    ║");
-    println!("║                                                        ║");
-    println!("║  Configure your API keys and channels.                  ║");
+    println!("║                                                          ║");
+    println!("║  Configure your API keys and channels.                   ║");
     println!("║  Secrets are stored in .env (not committed to git).      ║");
     println!("╚══════════════════════════════════════════════════════════╝");
     println!();
@@ -200,7 +200,7 @@ pub fn run_onboard(config_path: &Path, env_path: &Path) -> Result<()> {
     println!("║                                                          ║");
     println!("║  Next steps:                                             ║");
     println!("║  1. Run: source .env     (load secrets)                  ║");
-    println!("║  2. Run: open-clanker config-validate                   ║");
+    println!("║  2. Run: open-clanker config-validate                    ║");
     println!("║  3. Run: open-clanker gateway                            ║");
     println!("║                                                          ║");
     println!("║  Or in one line:                                         ║");
