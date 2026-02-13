@@ -1,7 +1,9 @@
+mod banner;
 mod onboard;
 mod tui;
 
 use clap::{Parser, Subcommand};
+use colored::Colorize;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -171,9 +173,13 @@ async fn cmd_gateway(config_path: Option<PathBuf>, host: Option<String>, port: O
     let server = GatewayServer::new(config, shutdown_token.clone());
 
     let addr = server.address();
-    println!("Starting Open Clanker Gateway on http://{}", addr);
-    println!("  WebSocket: ws://{}/ws", addr);
-    println!("  Health:   http://{}/health", addr);
+    println!("{}", banner::gateway_banner());
+    println!();
+    println!("{}", "Gateway ready:".bold());
+    println!("  HTTP:       http://{}", addr);
+    println!("  WebSocket:  ws://{}/ws", addr);
+    println!("  Health:    http://{}/health", addr);
+    println!();
     println!("Press Ctrl+C to stop.");
 
     server.start().await.map_err(|e| anyhow::anyhow!("Gateway error: {}", e))?;
@@ -181,7 +187,7 @@ async fn cmd_gateway(config_path: Option<PathBuf>, host: Option<String>, port: O
     Ok(())
 }
 
-async fn cmd_send(message: String, channel: Option<String>, chat_id: Option<String>) -> anyhow::Result<()> {
+async fn cmd_send(_message: String, _channel: Option<String>, _chat_id: Option<String>) -> anyhow::Result<()> {
     println!("Send command not yet implemented!");
     Ok(())
 }
@@ -231,9 +237,19 @@ async fn cmd_version() -> anyhow::Result<()> {
 }
 
 fn print_welcome() {
-    println!("Open Clanker AI Assistant Gateway");
-    println!("Commands: onboard, config-generate, config-validate, gateway, send, status, tui, version");
+    println!("{}", banner::welcome_banner());
     println!();
-    println!("  onboard - Interactive setup wizard (API keys, Telegram, Discord)");
-    println!("  tui     - Launch TUI client (requires gateway running: open-clanker gateway)");
+    println!("{}", "Commands:".bold());
+    println!("  onboard          - Interactive setup wizard (API keys, Telegram, Discord)");
+    println!("  config-generate  - Generate config.toml");
+    println!("  config-validate  - Validate configuration");
+    println!("  gateway          - Start gateway server");
+    println!("  send             - Send message (when implemented)");
+    println!("  status           - Show status");
+    println!("  tui              - Launch TUI client (requires gateway running)");
+    println!("  version          - Show version");
+    println!();
+    println!("{}", "Quick start:".bold());
+    println!("  ./open-clanker onboard   # or: cargo run -p clanker-cli -- onboard");
+    println!("  source .env && ./open-clanker gateway");
 }
