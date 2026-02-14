@@ -115,7 +115,27 @@ pub fn run_onboard(config_path: &Path, env_path: &Path) -> Result<()> {
         anyhow::bail!("At least one channel (Telegram or Discord) is required. Run onboard again.");
     }
 
-    // 5. Server port
+    // 5. Groq API key (for Worker_Clankers when orchestration enabled and master is not Groq)
+    let groq_key: Option<String> = if provider != "groq" {
+        let need_groq = Confirm::new()
+            .with_prompt("Orchestration uses Groq for Worker_Clankers. Add Groq API key now?")
+            .default(true)
+            .interact()?;
+        if need_groq {
+            let key = Password::new()
+                .with_prompt("Groq API key (for Worker_Clankers)")
+                .allow_empty_password(true)
+                .interact()?;
+            let key = key.trim().to_string();
+            if key.is_empty() { None } else { Some(key) }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    // 6. Server port
     let port_str: String = Input::new()
         .with_prompt("Server port")
         .default("18789".to_string())
@@ -186,6 +206,9 @@ pub fn run_onboard(config_path: &Path, env_path: &Path) -> Result<()> {
     if let Some(t) = &discord_token {
         env_lines.push(format!("OPENCLAW_DISCORD_BOT_TOKEN={}", t));
     }
+    if let Some(k) = &groq_key {
+        env_lines.push(format!("OPENCLAW_GROQ_API_KEY={}", k));
+    }
 
     env_lines.push("".to_string());
     env_lines.push("# Optional overrides:".to_string());
@@ -195,6 +218,23 @@ pub fn run_onboard(config_path: &Path, env_path: &Path) -> Result<()> {
     let env_content = env_lines.join("\n");
     std::fs::write(env_path, env_content)?;
     println!("✓ Wrote {}", env_path.display());
+
+    // Load .env and validate config
+    println!();
+    println!("Validating configuration...");
+    if let Err(e) = dotenvy::from_path(env_path) {
+        println!("⚠ Could not load .env: {}", e);
+    } else if let Ok(mut config) = Config::load_from_path(config_path) {
+        if let Err(e) = config.load_env() {
+            println!("⚠ Could not load env vars: {}", e);
+        } else if let Err(e) = config.validate() {
+            println!("✗ Config validation failed: {}", e);
+        } else {
+            println!("✓ Configuration is valid!");
+        }
+    } else {
+        println!("⚠ Could not load config for validation");
+    }
 
     println!();
     println!("╔══════════════════════════════════════════════════════════╗");
