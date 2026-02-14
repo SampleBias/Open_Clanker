@@ -186,6 +186,7 @@ fn worker_config_to_agent_config(worker: &WorkerAgentConfig) -> AgentConfig {
         max_tokens: worker.max_tokens,
         api_base_url: None,
         worker: None,
+        fallback: None,
     }
 }
 
@@ -290,6 +291,7 @@ mod tests {
             max_tokens: 100,
             api_base_url: None,
             worker: None,
+            fallback: None,
         });
 
         let worker_config = WorkerAgentConfig {

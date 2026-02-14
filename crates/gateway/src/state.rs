@@ -125,6 +125,11 @@ impl AppState {
         self.inner.agent.clone()
     }
 
+    /// Get fallback agent when primary fails (e.g. Z.ai when Claude fails)
+    pub fn fallback_agent(&self) -> Option<Arc<dyn clanker_agent::Agent + Send + Sync>> {
+        self.inner.fallback_agent.clone()
+    }
+
     /// Get orchestrator when orchestration is enabled
     pub fn orchestrator(&self) -> Option<&clanker_agent::MasterClanker> {
         self.inner.orchestrator.as_ref()
@@ -179,6 +184,8 @@ struct AppStateInner {
     config: Config,
     /// AI agent for message processing (Master_Clanker when orchestration enabled)
     agent: Arc<dyn clanker_agent::Agent + Send + Sync>,
+    /// Fallback agent when primary fails (e.g. Z.ai when Claude fails)
+    fallback_agent: Option<Arc<dyn clanker_agent::Agent + Send + Sync>>,
     /// Orchestrator when orchestration is enabled
     orchestrator: Option<clanker_agent::MasterClanker>,
     /// Channel instances for sending responses
@@ -219,6 +226,7 @@ impl AppStateInner {
     /// Create new inner state
     fn new(config: Config, shutdown_token: CancellationToken) -> Self {
         let agent = processor::create_agent(&config);
+        let fallback_agent = processor::create_fallback_agent(&config);
         let channels = Self::create_channels_from_config(&config);
         let max_workers = config.orchestration.max_workers;
 
@@ -241,6 +249,7 @@ impl AppStateInner {
             broadcaster: MessageBroadcaster::new(shutdown_token.clone()),
             config,
             agent,
+            fallback_agent,
             channels,
             connections: RwLock::new(HashMap::new()),
             total_messages: AtomicU64::new(0),

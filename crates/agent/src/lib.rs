@@ -22,6 +22,7 @@
 //!         max_tokens: 4096,
 //!         api_base_url: None,
 //!         worker: None,
+//!         fallback: None,
 //!     };
 //!
 //!     let agent = AgentFactory::create_from_config(config);
@@ -48,6 +49,7 @@ pub mod openai;
 pub mod orchestrator;
 pub mod placeholder;
 pub mod types;
+pub mod zai;
 
 // Re-exports for convenience
 pub use factory::AgentFactory;

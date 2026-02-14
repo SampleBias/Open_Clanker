@@ -3,6 +3,7 @@ use crate::grok::GrokAgent;
 use crate::groq::GroqAgent;
 use crate::openai::OpenAIAgent;
 use crate::types::Agent;
+use crate::zai::ZaiAgent;
 use clanker_config::AgentConfig;
 use std::sync::Arc;
 use tracing::{debug, info};
@@ -36,6 +37,10 @@ impl AgentFactory {
                 debug!("Creating Groq agent");
                 Box::new(GroqAgent::new(config))
             }
+            "zai" => {
+                debug!("Creating Z.ai (GLM-4.7) agent");
+                Box::new(ZaiAgent::new(config))
+            }
             _ => {
                 debug!("Unknown provider, using placeholder agent");
                 Box::new(crate::placeholder::PlaceholderAgent::new(config))
@@ -50,13 +55,14 @@ impl AgentFactory {
             "openai" => Arc::new(OpenAIAgent::new(config)),
             "grok" => Arc::new(GrokAgent::new(config)),
             "groq" => Arc::new(GroqAgent::new(config)),
+            "zai" => Arc::new(ZaiAgent::new(config)),
             _ => Arc::new(crate::placeholder::PlaceholderAgent::new(config)),
         }
     }
 
     /// Get supported providers
     pub fn supported_providers() -> Vec<&'static str> {
-        vec!["anthropic", "openai", "grok", "groq"]
+        vec!["anthropic", "openai", "grok", "groq", "zai"]
     }
 
     /// Check if provider is supported
@@ -73,7 +79,7 @@ mod tests {
     #[test]
     fn test_supported_providers() {
         let providers = AgentFactory::supported_providers();
-        assert_eq!(providers.len(), 4);
+        assert_eq!(providers.len(), 5);
         assert!(providers.contains(&"anthropic"));
         assert!(providers.contains(&"openai"));
         assert!(providers.contains(&"grok"));
@@ -86,6 +92,7 @@ mod tests {
         assert!(AgentFactory::is_supported("openai"));
         assert!(AgentFactory::is_supported("grok"));
         assert!(AgentFactory::is_supported("groq"));
+        assert!(AgentFactory::is_supported("zai"));
 
         assert!(!AgentFactory::is_supported("unknown"));
         assert!(!AgentFactory::is_supported(""));

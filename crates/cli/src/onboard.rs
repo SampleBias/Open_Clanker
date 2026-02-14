@@ -36,9 +36,14 @@ const PROVIDERS: &[ProviderInfo] = &[
         api_key_env: "OPENCLAW_GROQ_API_KEY",
         default_model: "llama-3.3-70b-versatile",
     },
+    ProviderInfo {
+        name: "Z.ai (GLM-4.7) — coding, tools, Master_Clanker fallback",
+        api_key_env: "OPENCLAW_ZAI_API_KEY",
+        default_model: "glm-4.7",
+    },
 ];
 
-const PROVIDER_IDS: &[&str] = &["anthropic", "openai", "grok", "groq"];
+const PROVIDER_IDS: &[&str] = &["anthropic", "openai", "grok", "groq", "zai"];
 
 /// Run the onboarding wizard
 pub fn run_onboard(config_path: &Path, env_path: &Path) -> Result<()> {
@@ -115,7 +120,27 @@ pub fn run_onboard(config_path: &Path, env_path: &Path) -> Result<()> {
         anyhow::bail!("At least one channel (Telegram or Discord) is required. Run onboard again.");
     }
 
-    // 5. Groq API key (for Worker_Clankers when orchestration enabled and master is not Groq)
+    // 5. Z.ai fallback (when primary is Claude/OpenAI and user wants fallback on failure)
+    let (zai_fallback_key, add_fallback) = if provider != "zai" && (provider == "anthropic" || provider == "openai") {
+        let add = Confirm::new()
+            .with_prompt("Add Z.ai (GLM-4.7) as fallback when primary fails? (Master_Clanker resilience)")
+            .default(true)
+            .interact()?;
+        if add {
+            let key = Password::new()
+                .with_prompt("Z.ai API key (fallback)")
+                .allow_empty_password(true)
+                .interact()?;
+            let key = key.trim().to_string();
+            (if key.is_empty() { None } else { Some(key) }, add)
+        } else {
+            (None, false)
+        }
+    } else {
+        (None, false)
+    };
+
+    // 6. Groq API key (for Worker_Clankers when orchestration enabled and master is not Groq)
     let groq_key: Option<String> = if provider != "groq" {
         let need_groq = Confirm::new()
             .with_prompt("Orchestration uses Groq for Worker_Clankers. Add Groq API key now?")
@@ -135,7 +160,7 @@ pub fn run_onboard(config_path: &Path, env_path: &Path) -> Result<()> {
         None
     };
 
-    // 6. Server port
+    // 7. Server port
     let port_str: String = Input::new()
         .with_prompt("Server port")
         .default("18789".to_string())
@@ -146,6 +171,49 @@ pub fn run_onboard(config_path: &Path, env_path: &Path) -> Result<()> {
         })
         .interact()?;
     let port: u16 = port_str.parse().expect("validated above");
+
+    // 8. pCloud access (OAuth token for file storage, skills, shared links)
+    let pcloud_token: Option<String> = if Confirm::new()
+        .with_prompt("Add pCloud access? (OAuth token for file storage, skills libraries)")
+        .default(false)
+        .interact()?
+    {
+        let token = Password::new()
+            .with_prompt("pCloud OAuth access token (from https://my.pcloud.com/oauth2/authorize)")
+            .allow_empty_password(true)
+            .interact()?;
+        let token = token.trim().to_string();
+        if token.is_empty() { None } else { Some(token) }
+    } else {
+        None
+    };
+
+    // 9. ProtonMail (email provider for Open Clanker)
+    let (protonmail_username, protonmail_token): (Option<String>, Option<String>) = if Confirm::new()
+        .with_prompt("Add ProtonMail as email provider? (SMTP for sending)")
+        .default(false)
+        .interact()?
+    {
+        let username: String = Input::new()
+            .with_prompt("ProtonMail email address")
+            .allow_empty(true)
+            .interact()
+            .unwrap_or_default();
+        let username = username.trim().to_string();
+        let token = if !username.is_empty() {
+            let t = Password::new()
+                .with_prompt("ProtonMail SMTP token (Settings → IMAP/SMTP → SMTP tokens)")
+                .allow_empty_password(true)
+                .interact()?;
+            let t = t.trim().to_string();
+            if t.is_empty() { None } else { Some(t) }
+        } else {
+            None
+        };
+        (if username.is_empty() { None } else { Some(username) }, token)
+    } else {
+        (None, None)
+    };
 
     // Build config
     let mut channels = ChannelsConfig {
@@ -167,6 +235,17 @@ pub fn run_onboard(config_path: &Path, env_path: &Path) -> Result<()> {
         });
     }
 
+    let agent_fallback = if add_fallback && zai_fallback_key.is_some() {
+        Some(clanker_config::FallbackAgentConfig {
+            provider: "zai".to_string(),
+            model: "glm-4.7".to_string(),
+            api_key_env: "OPENCLAW_ZAI_API_KEY".to_string(),
+            api_key: None, // From env
+        })
+    } else {
+        None
+    };
+
     let config = Config {
         server: ServerConfig {
             host: "0.0.0.0".to_string(),
@@ -182,6 +261,7 @@ pub fn run_onboard(config_path: &Path, env_path: &Path) -> Result<()> {
             max_tokens: 4096,
             api_base_url: None,
             worker: None,
+            fallback: agent_fallback,
         },
         orchestration: clanker_config::OrchestrationConfig::default(),
         logging: LoggingConfig::default(),
@@ -208,6 +288,18 @@ pub fn run_onboard(config_path: &Path, env_path: &Path) -> Result<()> {
     }
     if let Some(k) = &groq_key {
         env_lines.push(format!("OPENCLAW_GROQ_API_KEY={}", k));
+    }
+    if let Some(k) = &zai_fallback_key {
+        env_lines.push(format!("OPENCLAW_ZAI_API_KEY={}", k));
+    }
+    if let Some(t) = &pcloud_token {
+        env_lines.push(format!("OPENCLAW_PCLOUD_ACCESS_TOKEN={}", t));
+    }
+    if let Some(u) = &protonmail_username {
+        env_lines.push(format!("OPENCLAW_PROTONMAIL_USERNAME={}", u));
+    }
+    if let Some(t) = &protonmail_token {
+        env_lines.push(format!("OPENCLAW_PROTONMAIL_SMTP_TOKEN={}", t));
     }
 
     env_lines.push("".to_string());

@@ -58,6 +58,13 @@ impl Config {
             }
         }
 
+        // Load fallback agent API key when configured
+        if let Some(ref mut fallback) = self.agent.fallback {
+            if let Ok(api_key) = std::env::var(&fallback.api_key_env) {
+                fallback.api_key = Some(api_key);
+            }
+        }
+
         // Override server config from environment
         if let Ok(host) = std::env::var("OPENCLAW_HOST") {
             self.server.host = host;
@@ -100,7 +107,7 @@ impl Config {
         }
 
         // Validate agent configuration
-        let valid_providers = ["anthropic", "openai", "grok", "groq"];
+        let valid_providers = ["anthropic", "openai", "grok", "groq", "zai"];
         if !valid_providers.contains(&self.agent.provider.as_str()) {
             return Err(ClankerError::Config(format!(
                 "Invalid provider: {}. Must be one of: {:?}",
@@ -249,6 +256,27 @@ impl Default for DiscordConfig {
     }
 }
 
+/// Fallback agent config (e.g. Z.ai when Claude fails)
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct FallbackAgentConfig {
+    pub provider: String,
+    pub model: String,
+    pub api_key_env: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_key: Option<String>,  // Loaded from environment, not saved to file
+}
+
+impl Default for FallbackAgentConfig {
+    fn default() -> Self {
+        Self {
+            provider: "zai".to_string(),
+            model: "glm-4.7".to_string(),
+            api_key_env: "OPENCLAW_ZAI_API_KEY".to_string(),
+            api_key: None,
+        }
+    }
+}
+
 /// AI agent configuration
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct AgentConfig {
@@ -263,6 +291,9 @@ pub struct AgentConfig {
     /// Worker agent config (Groq) for orchestration - optional, uses defaults if absent
     #[serde(skip_serializing_if = "Option::is_none")]
     pub worker: Option<WorkerAgentConfig>,
+    /// Fallback agent (e.g. Z.ai) when primary (e.g. Claude) fails
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fallback: Option<FallbackAgentConfig>,
 }
 
 /// Worker agent configuration (Groq-only, used by Master_Clanker for subagents)
@@ -327,6 +358,7 @@ impl Default for AgentConfig {
             max_tokens: 4096,
             api_base_url: None,
             worker: None,
+            fallback: None,
         }
     }
 }
@@ -425,6 +457,7 @@ mod tests {
                 max_tokens: 4096,
                 api_base_url: None,
                 worker: None,
+                fallback: None,
             },
             orchestration: OrchestrationConfig::default(),
             logging: LoggingConfig {

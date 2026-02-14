@@ -205,6 +205,7 @@ mod tests {
             max_tokens: 100,
             api_base_url: None,
             worker: None,
+            fallback: None,
         };
 
         let agent = GrokAgent::new(config);

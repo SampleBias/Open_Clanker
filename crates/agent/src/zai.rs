@@ -1,3 +1,9 @@
+//! Z.ai GLM-4.7 agent (OpenAI-compatible API)
+//!
+//! Z.ai provides GLM-4.7 with strong coding, tool invocation, and agent capabilities.
+//! API: https://api.z.ai/api/paas/v4/chat/completions
+//! Docs: https://docs.z.ai/
+
 use crate::types::{
     Agent, AgentError, AgentMessage, AgentResponse, StreamChunk, Usage,
 };
@@ -7,45 +13,53 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tracing::{debug, trace};
 
-/// OpenAI GPT agent
-pub struct OpenAIAgent {
+/// Z.ai GLM-4.7 agent (OpenAI-compatible)
+pub struct ZaiAgent {
     config: clanker_config::AgentConfig,
     client: Client,
 }
 
-impl OpenAIAgent {
+impl ZaiAgent {
     pub fn new(config: clanker_config::AgentConfig) -> Self {
         let client = Client::builder()
-            .timeout(Duration::from_secs(30))
+            .timeout(Duration::from_secs(60))
             .build()
             .expect("Failed to create HTTP client");
 
         Self { config, client }
     }
 
-    const API_URL: &'static str = "https://api.openai.com/v1/chat/completions";
+    /// Z.ai API base URL (OpenAI-compatible)
+    const API_BASE: &'static str = "https://api.z.ai/api/paas/v4";
 }
 
 #[async_trait]
-impl Agent for OpenAIAgent {
+impl Agent for ZaiAgent {
     async fn chat(&self, messages: Vec<AgentMessage>) -> Result<AgentResponse, AgentError> {
-        debug!("Sending chat request to OpenAI");
+        debug!("Sending chat request to Z.ai (GLM-4.7)");
 
-        let request = OpenAIRequest {
+        let api_url = self
+            .config
+            .api_base_url
+            .as_deref()
+            .unwrap_or(Self::API_BASE);
+        let url = format!("{}/chat/completions", api_url.trim_end_matches('/'));
+
+        let request = ZaiRequest {
             model: self.config.model.clone(),
-            messages: messages_to_openai(messages),
+            messages: messages_to_zai(messages),
             max_tokens: Some(self.config.max_tokens),
-            temperature: Some(0.7),  // Default temperature
+            temperature: Some(0.7),
         };
 
         let response = self
             .client
-            .post(Self::API_URL)
+            .post(&url)
             .header(
                 "Authorization",
                 format!("Bearer {}", self.config.api_key.as_ref().unwrap_or(&String::new())),
             )
-            .header("content-type", "application/json")
+            .header("Content-Type", "application/json")
             .json(&request)
             .send()
             .await
@@ -59,38 +73,44 @@ impl Agent for OpenAIAgent {
 
         if !status.is_success() {
             return Err(AgentError::ProviderError(format!(
-                "OpenAI API error {}: {}",
+                "Z.ai API error {}: {}",
                 status, response_text
             )));
         }
 
-        let openai_response: OpenAIResponse = serde_json::from_str(&response_text)
+        let zai_response: ZaiResponse = serde_json::from_str(&response_text)
             .map_err(|e| AgentError::InvalidResponse(e.to_string()))?;
 
-        trace!("Received OpenAI response");
+        trace!("Received Z.ai response");
 
-        let content = openai_response
+        let content = zai_response
             .choices
             .first()
-            .map(|c| c.message.content.clone())
+            .and_then(|c| c.message.content.clone())
             .unwrap_or_else(|| "".to_string());
 
-        let finish_reason = openai_response
+        let finish_reason = zai_response
             .choices
             .first()
-            .map(|c| c.finish_reason.clone())
+            .map(|c| c.finish_reason.clone().unwrap_or_else(|| "stop".to_string()))
             .unwrap_or_else(|| "stop".to_string());
+
+        let usage = zai_response.usage.map(|u| Usage {
+            prompt_tokens: u.prompt_tokens,
+            completion_tokens: u.completion_tokens,
+            total_tokens: u.total_tokens,
+        }).unwrap_or(Usage {
+            prompt_tokens: 0,
+            completion_tokens: 0,
+            total_tokens: 0,
+        });
 
         Ok(AgentResponse {
             content,
             finish_reason,
-            usage: Usage {
-                prompt_tokens: openai_response.usage.prompt_tokens,
-                completion_tokens: openai_response.usage.completion_tokens,
-                total_tokens: openai_response.usage.total_tokens,
-            },
+            usage,
             model: self.config.model.clone(),
-            provider: "openai".to_string(),
+            provider: "zai".to_string(),
         })
     }
 
@@ -101,12 +121,12 @@ impl Agent for OpenAIAgent {
         Box<dyn futures::Stream<Item = Result<StreamChunk, AgentError>> + Send + Unpin>,
         AgentError,
     > {
-        debug!("Streaming not yet implemented for OpenAI");
+        debug!("Streaming not yet implemented for Z.ai");
         Err(AgentError::Unknown("Streaming not implemented".to_string()))
     }
 
     fn provider(&self) -> &str {
-        "openai"
+        "zai"
     }
 
     fn model(&self) -> &str {
@@ -114,51 +134,50 @@ impl Agent for OpenAIAgent {
     }
 }
 
-/// OpenAI API request
+/// Z.ai API request (OpenAI-compatible)
 #[derive(Debug, Serialize)]
-struct OpenAIRequest {
+struct ZaiRequest {
     model: String,
-    messages: Vec<OpenAIMessage>,
+    messages: Vec<ZaiMessage>,
     max_tokens: Option<u32>,
     temperature: Option<f32>,
 }
 
 #[derive(Debug, Serialize)]
-struct OpenAIMessage {
+struct ZaiMessage {
     role: String,
     content: String,
 }
 
-/// OpenAI API response
+/// Z.ai API response (OpenAI-compatible)
 #[derive(Debug, Deserialize)]
-struct OpenAIResponse {
-    choices: Vec<Choice>,
-    usage: OpenAIUsage,
+struct ZaiResponse {
+    choices: Vec<ZaiChoice>,
+    usage: Option<ZaiUsage>,
 }
 
 #[derive(Debug, Deserialize)]
-struct Choice {
-    message: Message,
-    finish_reason: String,
+struct ZaiChoice {
+    message: ZaiMessageResponse,
+    finish_reason: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
-struct Message {
-    content: String,
+struct ZaiMessageResponse {
+    content: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
-struct OpenAIUsage {
+struct ZaiUsage {
     prompt_tokens: u32,
     completion_tokens: u32,
     total_tokens: u32,
 }
 
-/// Convert agent messages to OpenAI format
-fn messages_to_openai(messages: Vec<AgentMessage>) -> Vec<OpenAIMessage> {
+fn messages_to_zai(messages: Vec<AgentMessage>) -> Vec<ZaiMessage> {
     messages
         .into_iter()
-        .map(|msg| OpenAIMessage {
+        .map(|msg| ZaiMessage {
             role: serde_json::to_string(&msg.role)
                 .unwrap_or_else(|_| "\"user\"".to_string())
                 .trim_matches('"')
@@ -173,7 +192,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_messages_to_openai() {
+    fn test_messages_to_zai() {
         use crate::types::MessageRole;
         let messages = vec![
             AgentMessage {
@@ -186,30 +205,30 @@ mod tests {
             },
         ];
 
-        let openai_messages = messages_to_openai(messages);
+        let zai_messages = messages_to_zai(messages);
 
-        assert_eq!(openai_messages.len(), 2);
-        assert_eq!(openai_messages[0].role, "user");
-        assert_eq!(openai_messages[0].content, "Hello");
-        assert_eq!(openai_messages[1].role, "assistant");
-        assert_eq!(openai_messages[1].content, "Hi there!");
+        assert_eq!(zai_messages.len(), 2);
+        assert_eq!(zai_messages[0].role, "user");
+        assert_eq!(zai_messages[0].content, "Hello");
+        assert_eq!(zai_messages[1].role, "assistant");
+        assert_eq!(zai_messages[1].content, "Hi there!");
     }
 
     #[test]
-    fn test_openai_agent_creation() {
+    fn test_zai_agent_creation() {
         let config = clanker_config::AgentConfig {
-            provider: "openai".to_string(),
-            model: "gpt-4".to_string(),
-            api_key_env: "OPENAI_API_KEY".to_string(),
+            provider: "zai".to_string(),
+            model: "glm-4.7".to_string(),
+            api_key_env: "ZAI_API_KEY".to_string(),
             api_key: Some("test-key".to_string()),
-            max_tokens: 100,
+            max_tokens: 4096,
             api_base_url: None,
             worker: None,
             fallback: None,
         };
 
-        let agent = OpenAIAgent::new(config);
-        assert_eq!(agent.provider(), "openai");
-        assert_eq!(agent.model(), "gpt-4");
+        let agent = ZaiAgent::new(config);
+        assert_eq!(agent.provider(), "zai");
+        assert_eq!(agent.model(), "glm-4.7");
     }
 }
