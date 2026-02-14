@@ -4,7 +4,7 @@
 
 use anyhow::Result;
 use clanker_config::{AgentConfig, ChannelsConfig, Config, DiscordConfig, LoggingConfig, ServerConfig, TelegramConfig};
-use dialoguer::{Confirm, Input, Password, Select};
+use dialoguer::{Confirm, Input, MultiSelect, Password, Select};
 use std::io::IsTerminal;
 use std::path::Path;
 
@@ -27,17 +27,17 @@ const PROVIDERS: &[ProviderInfo] = &[
         default_model: "gpt-4",
     },
     ProviderInfo {
-        name: "Grok (xAI)",
+        name: "xAI (Grok)",
         api_key_env: "OPENCLAW_GROK_API_KEY",
         default_model: "grok-2",
     },
     ProviderInfo {
-        name: "Groq",
+        name: "Groq (llama-3)",
         api_key_env: "OPENCLAW_GROQ_API_KEY",
         default_model: "llama-3.3-70b-versatile",
     },
     ProviderInfo {
-        name: "Z.ai (GLM-4.7) — coding, tools, Master_Clanker fallback",
+        name: "Z.ai (GLM-4.7)",
         api_key_env: "OPENCLAW_ZAI_API_KEY",
         default_model: "glm-4.7",
     },
@@ -75,11 +75,48 @@ pub fn run_onboard(config_path: &Path, env_path: &Path) -> Result<()> {
     let provider = PROVIDER_IDS[provider_idx];
     let provider_info = &PROVIDERS[provider_idx];
 
-    // 2. API Key
+    // 2. API Key (primary provider)
     let api_key: String = Password::new()
         .with_prompt(format!("{} API key", provider_info.name))
         .allow_empty_password(false)
         .interact()?;
+
+    // 2b. Add API keys for other providers?
+    let mut extra_keys: Vec<(&str, &str, String)> = Vec::new(); // (provider_id, env_var, key)
+    let other_providers: Vec<_> = PROVIDER_IDS
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| *i != provider_idx)
+        .map(|(i, &id)| (i, id, PROVIDERS[i].name))
+        .collect();
+    if !other_providers.is_empty()
+        && Confirm::new()
+            .with_prompt("Add API keys for other providers? (for fallback, workers, or switching)")
+            .default(false)
+            .interact()?
+    {
+        let choices: Vec<String> = other_providers
+            .iter()
+            .map(|(_, _, name)| format!("{}", name))
+            .collect();
+        let selected = MultiSelect::new()
+            .with_prompt("Select providers to add keys for")
+            .items(&choices)
+            .interact()?;
+        for &idx in &selected {
+            let (_, id, name) = &other_providers[idx];
+            let key = Password::new()
+                .with_prompt(format!("{} API key", name))
+                .allow_empty_password(true)
+                .interact()?;
+            let key = key.trim().to_string();
+            if !key.is_empty() {
+                let (orig_idx, _, _) = other_providers[idx];
+                let env_var = PROVIDERS[orig_idx].api_key_env;
+                extra_keys.push((id, env_var, key));
+            }
+        }
+    }
 
     // 3. Enable Telegram?
     let enable_telegram = Confirm::new()
@@ -120,6 +157,8 @@ pub fn run_onboard(config_path: &Path, env_path: &Path) -> Result<()> {
         anyhow::bail!("At least one channel (Telegram or Discord) is required. Run onboard again.");
     }
 
+    let has_extra_key = |env_var: &str| extra_keys.iter().any(|(_, ev, _)| *ev == env_var);
+
     // 5. Z.ai fallback (when primary is Claude/OpenAI and user wants fallback on failure)
     let (zai_fallback_key, add_fallback) = if provider != "zai" && (provider == "anthropic" || provider == "openai") {
         let add = Confirm::new()
@@ -127,11 +166,16 @@ pub fn run_onboard(config_path: &Path, env_path: &Path) -> Result<()> {
             .default(true)
             .interact()?;
         if add {
-            let key = Password::new()
-                .with_prompt("Z.ai API key (fallback)")
-                .allow_empty_password(true)
-                .interact()?;
-            let key = key.trim().to_string();
+            let key = if has_extra_key("OPENCLAW_ZAI_API_KEY") {
+                extra_keys.iter().find(|(_, ev, _)| *ev == "OPENCLAW_ZAI_API_KEY").map(|(_, _, k)| k.clone()).unwrap_or_default()
+            } else {
+                Password::new()
+                    .with_prompt("Z.ai API key (fallback)")
+                    .allow_empty_password(true)
+                    .interact()?
+                    .trim()
+                    .to_string()
+            };
             (if key.is_empty() { None } else { Some(key) }, add)
         } else {
             (None, false)
@@ -147,12 +191,16 @@ pub fn run_onboard(config_path: &Path, env_path: &Path) -> Result<()> {
             .default(true)
             .interact()?;
         if need_groq {
-            let key = Password::new()
-                .with_prompt("Groq API key (for Worker_Clankers)")
-                .allow_empty_password(true)
-                .interact()?;
-            let key = key.trim().to_string();
-            if key.is_empty() { None } else { Some(key) }
+            if has_extra_key("OPENCLAW_GROQ_API_KEY") {
+                extra_keys.iter().find(|(_, ev, _)| *ev == "OPENCLAW_GROQ_API_KEY").map(|(_, _, k)| k.clone())
+            } else {
+                let key = Password::new()
+                    .with_prompt("Groq API key (for Worker_Clankers)")
+                    .allow_empty_password(true)
+                    .interact()?;
+                let key = key.trim().to_string();
+                if key.is_empty() { None } else { Some(key) }
+            }
         } else {
             None
         }
@@ -280,6 +328,10 @@ pub fn run_onboard(config_path: &Path, env_path: &Path) -> Result<()> {
         format!("{}={}", provider_info.api_key_env, api_key),
     ];
 
+    for (_, env_var, key) in &extra_keys {
+        env_lines.push(format!("{}={}", env_var, key));
+    }
+
     if let Some(t) = &telegram_token {
         env_lines.push(format!("OPENCLAW_TELEGRAM_BOT_TOKEN={}", t));
     }
@@ -287,10 +339,14 @@ pub fn run_onboard(config_path: &Path, env_path: &Path) -> Result<()> {
         env_lines.push(format!("OPENCLAW_DISCORD_BOT_TOKEN={}", t));
     }
     if let Some(k) = &groq_key {
-        env_lines.push(format!("OPENCLAW_GROQ_API_KEY={}", k));
+        if !has_extra_key("OPENCLAW_GROQ_API_KEY") {
+            env_lines.push(format!("OPENCLAW_GROQ_API_KEY={}", k));
+        }
     }
     if let Some(k) = &zai_fallback_key {
-        env_lines.push(format!("OPENCLAW_ZAI_API_KEY={}", k));
+        if !has_extra_key("OPENCLAW_ZAI_API_KEY") {
+            env_lines.push(format!("OPENCLAW_ZAI_API_KEY={}", k));
+        }
     }
     if let Some(t) = &pcloud_token {
         env_lines.push(format!("OPENCLAW_PCLOUD_ACCESS_TOKEN={}", t));
