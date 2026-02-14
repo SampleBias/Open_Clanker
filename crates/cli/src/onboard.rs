@@ -161,7 +161,9 @@ pub fn run_onboard(config_path: &Path, env_path: &Path) -> Result<()> {
             api_key: None, // Always from env
             max_tokens: 4096,
             api_base_url: None,
+            worker: None,
         },
+        orchestration: clanker_config::OrchestrationConfig::default(),
         logging: LoggingConfig::default(),
     };
 

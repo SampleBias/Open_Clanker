@@ -64,12 +64,12 @@ impl GatewayServer {
             }
 
             // Spawn processing loop
-            let agent = state.agent();
+            let state_clone = state.clone();
             tokio::spawn(async move {
                 loop {
                     tokio::select! {
                         Some(incoming) = rx.recv() => {
-                            match processor::process_message(agent.as_ref(), &incoming).await {
+                            match processor::process_message(&state_clone, &incoming).await {
                                 Ok(response) => {
                                     if let Some(ch) = state.channel_for(incoming.channel_type) {
                                         if let Err(e) = ch.send(response).await {

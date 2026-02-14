@@ -69,6 +69,7 @@ mod tests {
             api_key: Some("test-key".to_string()),
             max_tokens: 100,
             api_base_url: None,
+            worker: None,
         };
 
         let agent = PlaceholderAgent::new(config);
@@ -93,6 +94,7 @@ mod tests {
             api_key: Some("test-key".to_string()),
             max_tokens: 100,
             api_base_url: None,
+            worker: None,
         };
 
         let agent = PlaceholderAgent::new(config);

@@ -29,6 +29,10 @@ pub struct HealthResponse {
     pub active_connections: usize,
     pub total_messages: u64,
     #[serde(default)]
+    pub active_workers: usize,
+    #[serde(default)]
+    pub max_workers: usize,
+    #[serde(default)]
     #[allow(dead_code)]
     pub timestamp: Option<String>,
 }
@@ -210,12 +214,14 @@ fn draw_ui(
 
         let status_text = if let Some(health) = &state.health {
             format!(
-                "Status: {} | Version: {} | Uptime: {}s | Connections: {} | Messages: {}",
+                "Status: {} | Version: {} | Uptime: {}s | Connections: {} | Messages: {} | Workers: {}/{}",
                 health.status,
                 health.version,
                 health.uptime_seconds,
                 health.active_connections,
-                health.total_messages
+                health.total_messages,
+                health.active_workers,
+                health.max_workers
             )
         } else {
             "Fetching...".to_string()

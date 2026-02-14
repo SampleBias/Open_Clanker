@@ -155,19 +155,34 @@ pub struct HealthResponse {
     pub active_connections: usize,
     /// Total messages processed
     pub total_messages: u64,
+    /// Active Worker_Clankers spawned by Master_Clanker
+    #[serde(default)]
+    pub active_workers: usize,
+    /// Maximum Worker_Clankers allowed
+    #[serde(default)]
+    pub max_workers: usize,
     /// Server timestamp
     pub timestamp: chrono::DateTime<chrono::Utc>,
 }
 
 impl HealthResponse {
     /// Create new health response
-    pub fn new(version: String, uptime_seconds: u64, active_connections: usize, total_messages: u64) -> Self {
+    pub fn new(
+        version: String,
+        uptime_seconds: u64,
+        active_connections: usize,
+        total_messages: u64,
+        active_workers: usize,
+        max_workers: usize,
+    ) -> Self {
         Self {
             status: "healthy".to_string(),
             version,
             uptime_seconds,
             active_connections,
             total_messages,
+            active_workers,
+            max_workers,
             timestamp: chrono::Utc::now(),
         }
     }
@@ -282,13 +297,15 @@ mod tests {
 
     #[test]
     fn test_health_response() {
-        let health = HealthResponse::new("1.0.0".to_string(), 100, 5, 1000);
+        let health = HealthResponse::new("1.0.0".to_string(), 100, 5, 1000, 0, 5);
 
         assert_eq!(health.status, "healthy");
         assert_eq!(health.version, "1.0.0");
         assert_eq!(health.uptime_seconds, 100);
         assert_eq!(health.active_connections, 5);
         assert_eq!(health.total_messages, 1000);
+        assert_eq!(health.active_workers, 0);
+        assert_eq!(health.max_workers, 5);
     }
 
     #[test]

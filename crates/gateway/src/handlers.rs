@@ -21,6 +21,8 @@ pub async fn health_check(State(state): State<AppState>) -> impl IntoResponse {
     let uptime = state.uptime_seconds() as u64;
     let active_connections = state.connection_count().await;
     let total_messages = state.total_message_count();
+    let active_workers = state.worker_count();
+    let max_workers = state.worker_max();
     let version = state.version().to_string();
 
     let health = HealthResponse::new(
@@ -28,9 +30,14 @@ pub async fn health_check(State(state): State<AppState>) -> impl IntoResponse {
         uptime,
         active_connections,
         total_messages,
+        active_workers,
+        max_workers,
     );
 
-    debug!("Health check: {} connections, {} messages", active_connections, total_messages);
+    debug!(
+        "Health check: {} connections, {} messages, {} workers",
+        active_connections, total_messages, active_workers
+    );
 
     Json(health)
 }
@@ -196,7 +203,7 @@ async fn handle_client_message(
                         message,
                     );
 
-                    match processor::process_message(state.agent().as_ref(), &incoming).await {
+                    match processor::process_message(&state, &incoming).await {
                         Ok(response_msg) => {
                             let response = WsServerMessage::send_response(
                                 true,
@@ -259,7 +266,7 @@ mod tests {
 
     #[test]
     fn test_health_response_serialization() {
-        let health = HealthResponse::new("1.0.0".to_string(), 100, 5, 1000);
+        let health = HealthResponse::new("1.0.0".to_string(), 100, 5, 1000, 2, 5);
 
         let json = serde_json::to_string(&health).unwrap();
 
@@ -268,5 +275,7 @@ mod tests {
         assert!(json.contains("\"uptime_seconds\":100"));
         assert!(json.contains("\"active_connections\":5"));
         assert!(json.contains("\"total_messages\":1000"));
+        assert!(json.contains("\"active_workers\":2"));
+        assert!(json.contains("\"max_workers\":5"));
     }
 }

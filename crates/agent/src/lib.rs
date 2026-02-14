@@ -21,6 +21,7 @@
 //!         api_key: Some("your-api-key".to_string()),
 //!         max_tokens: 4096,
 //!         api_base_url: None,
+//!         worker: None,
 //!     };
 //!
 //!     let agent = AgentFactory::create_from_config(config);
@@ -44,13 +45,15 @@ pub mod factory;
 pub mod grok;
 pub mod groq;
 pub mod openai;
+pub mod orchestrator;
 pub mod placeholder;
 pub mod types;
 
 // Re-exports for convenience
 pub use factory::AgentFactory;
+pub use orchestrator::{MasterClanker, MASTER_SYSTEM_PROMPT};
 pub use types::{
     Agent, AgentError, AgentMessage, AgentResponse, MessageRole,
-    StreamChunk, SystemPrompt, system_prompts, Usage,
+    StreamChunk, SystemPrompt, Usage, WorkerResult, WorkerTask, system_prompts,
 };
 pub use clanker_config::AgentConfig;

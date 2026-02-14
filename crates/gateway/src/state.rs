@@ -5,9 +5,9 @@ use clanker_config::Config;
 use clanker_core::ChannelType;
 use std::collections::HashMap;
 use std::fmt;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, Semaphore};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info};
 use uuid::Uuid;
@@ -125,6 +125,16 @@ impl AppState {
         self.inner.agent.clone()
     }
 
+    /// Get orchestrator when orchestration is enabled
+    pub fn orchestrator(&self) -> Option<&clanker_agent::MasterClanker> {
+        self.inner.orchestrator.as_ref()
+    }
+
+    /// Check if orchestration is enabled
+    pub fn orchestration_enabled(&self) -> bool {
+        self.inner.config.orchestration.enabled
+    }
+
     /// Get channel by type (for sending responses)
     pub fn channel_for(&self, channel_type: ChannelType) -> Option<Arc<dyn clanker_channels::Channel + Send + Sync>> {
         self.inner.channels.iter().find(|c| c.channel_type() == channel_type).cloned()
@@ -134,6 +144,31 @@ impl AppState {
     pub fn channels(&self) -> &[Arc<dyn clanker_channels::Channel + Send + Sync>] {
         &self.inner.channels
     }
+
+    /// Get current number of active Worker_Clankers
+    pub fn worker_count(&self) -> usize {
+        self.inner.active_workers.load(Ordering::Relaxed)
+    }
+
+    /// Get maximum allowed Worker_Clankers
+    pub fn worker_max(&self) -> usize {
+        self.inner.max_workers
+    }
+
+    /// Acquire permits for spawning workers (call before delegate)
+    pub fn worker_semaphore(&self) -> Arc<Semaphore> {
+        self.inner.worker_semaphore.clone()
+    }
+
+    /// Increment active worker count (called when spawning)
+    pub fn increment_worker_count(&self, n: usize) {
+        self.inner.active_workers.fetch_add(n, Ordering::Relaxed);
+    }
+
+    /// Decrement active worker count (called when workers complete)
+    pub fn decrement_worker_count(&self, n: usize) {
+        self.inner.active_workers.fetch_sub(n, Ordering::Relaxed);
+    }
 }
 
 /// Inner application state
@@ -142,8 +177,10 @@ struct AppStateInner {
     broadcaster: MessageBroadcaster,
     /// Application configuration
     config: Config,
-    /// AI agent for message processing
+    /// AI agent for message processing (Master_Clanker when orchestration enabled)
     agent: Arc<dyn clanker_agent::Agent + Send + Sync>,
+    /// Orchestrator when orchestration is enabled
+    orchestrator: Option<clanker_agent::MasterClanker>,
     /// Channel instances for sending responses
     channels: Vec<Arc<dyn clanker_channels::Channel + Send + Sync>>,
     /// Active connections (connection_id -> connection_state)
@@ -156,6 +193,12 @@ struct AppStateInner {
     shutdown_token: CancellationToken,
     /// Unique server ID
     server_id: Uuid,
+    /// Active Worker_Clanker count (for visibility)
+    active_workers: AtomicUsize,
+    /// Maximum Worker_Clankers allowed
+    max_workers: usize,
+    /// Semaphore to limit concurrent workers globally
+    worker_semaphore: Arc<Semaphore>,
 }
 
 impl fmt::Debug for AppStateInner {
@@ -177,6 +220,22 @@ impl AppStateInner {
     fn new(config: Config, shutdown_token: CancellationToken) -> Self {
         let agent = processor::create_agent(&config);
         let channels = Self::create_channels_from_config(&config);
+        let max_workers = config.orchestration.max_workers;
+
+        let orchestrator = if config.orchestration.enabled {
+            let worker_config = config
+                .agent
+                .worker
+                .clone()
+                .unwrap_or_else(clanker_config::WorkerAgentConfig::default);
+            Some(clanker_agent::MasterClanker::new(
+                agent.clone(),
+                worker_config,
+                max_workers,
+            ))
+        } else {
+            None
+        };
 
         Self {
             broadcaster: MessageBroadcaster::new(shutdown_token.clone()),
@@ -188,6 +247,10 @@ impl AppStateInner {
             start_time: chrono::Utc::now(),
             shutdown_token,
             server_id: Uuid::new_v4(),
+            active_workers: AtomicUsize::new(0),
+            max_workers,
+            worker_semaphore: Arc::new(Semaphore::new(max_workers)),
+            orchestrator,
         }
     }
 

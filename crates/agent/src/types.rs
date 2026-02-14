@@ -58,6 +58,21 @@ pub struct AgentResponse {
     pub provider: String,
 }
 
+/// Task assigned to a Worker_Clanker by Master_Clanker
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkerTask {
+    pub identity: String,
+    pub task: String,
+}
+
+/// Result from a Worker_Clanker after completing its task
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkerResult {
+    pub identity: String,
+    pub task: String,
+    pub content: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Usage {
     pub prompt_tokens: u32,

@@ -9,6 +9,8 @@ pub struct Config {
     pub server: ServerConfig,
     pub channels: ChannelsConfig,
     pub agent: AgentConfig,
+    #[serde(default)]
+    pub orchestration: OrchestrationConfig,
     pub logging: LoggingConfig,
 }
 
@@ -46,6 +48,14 @@ impl Config {
         // Load agent API key based on provider
         if let Ok(api_key) = std::env::var(&self.agent.api_key_env) {
             self.agent.api_key = Some(api_key);
+        }
+
+        // Load worker API key when orchestration is enabled
+        if self.orchestration.enabled {
+            let worker = self.agent.worker.get_or_insert_with(WorkerAgentConfig::default);
+            if let Ok(api_key) = std::env::var(&worker.api_key_env) {
+                worker.api_key = Some(api_key);
+            }
         }
 
         // Override server config from environment
@@ -112,6 +122,24 @@ impl Config {
                     self.agent.api_key_env
                 )
                 ));
+        }
+
+        // Validate orchestration config
+        if self.orchestration.max_workers == 0 || self.orchestration.max_workers > 5 {
+            return Err(ClankerError::Config(
+                "orchestration.max_workers must be between 1 and 5".to_string(),
+            ));
+        }
+
+        // When orchestration enabled with explicit worker config, validate worker model
+        if self.orchestration.enabled {
+            if let Some(worker) = &self.agent.worker {
+                if worker.model.is_empty() {
+                    return Err(ClankerError::Config(
+                        "Worker agent model cannot be empty".to_string(),
+                    ));
+                }
+            }
         }
 
         // Validate logging config
@@ -232,6 +260,61 @@ pub struct AgentConfig {
     pub max_tokens: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub api_base_url: Option<String>,  // Optional: Custom API endpoint
+    /// Worker agent config (Groq) for orchestration - optional, uses defaults if absent
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub worker: Option<WorkerAgentConfig>,
+}
+
+/// Worker agent configuration (Groq-only, used by Master_Clanker for subagents)
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct WorkerAgentConfig {
+    pub model: String,
+    pub api_key_env: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_key: Option<String>,  // Loaded from environment, not saved to file
+    #[serde(default = "default_worker_max_tokens")]
+    pub max_tokens: u32,
+}
+
+fn default_worker_max_tokens() -> u32 {
+    2048
+}
+
+impl Default for WorkerAgentConfig {
+    fn default() -> Self {
+        Self {
+            model: "llama-3.3-70b-versatile".to_string(),
+            api_key_env: "OPENCLAW_GROQ_API_KEY".to_string(),
+            api_key: None,
+            max_tokens: 2048,
+        }
+    }
+}
+
+/// Orchestration configuration for Master_Clanker / Worker_Clanker hierarchy
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct OrchestrationConfig {
+    #[serde(default = "default_orchestration_enabled")]
+    pub enabled: bool,
+    #[serde(default = "default_max_workers")]
+    pub max_workers: usize,
+}
+
+fn default_orchestration_enabled() -> bool {
+    true
+}
+
+fn default_max_workers() -> usize {
+    5
+}
+
+impl Default for OrchestrationConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            max_workers: 5,
+        }
+    }
 }
 
 impl Default for AgentConfig {
@@ -243,6 +326,7 @@ impl Default for AgentConfig {
             api_key: None,
             max_tokens: 4096,
             api_base_url: None,
+            worker: None,
         }
     }
 }
@@ -269,6 +353,7 @@ pub fn generate_default_config() -> String {
         server: ServerConfig::default(),
         channels: ChannelsConfig::default(),
         agent: AgentConfig::default(),
+        orchestration: OrchestrationConfig::default(),
         logging: LoggingConfig::default(),
     };
 
@@ -304,6 +389,7 @@ mod tests {
             server: ServerConfig::default(),
             channels: ChannelsConfig::default(),
             agent: AgentConfig::default(),
+            orchestration: OrchestrationConfig::default(),
             logging: LoggingConfig::default(),
         };
 
@@ -338,7 +424,9 @@ mod tests {
                 api_key: Some("test-key".to_string()),
                 max_tokens: 4096,
                 api_base_url: None,
+                worker: None,
             },
+            orchestration: OrchestrationConfig::default(),
             logging: LoggingConfig {
                 level: "info".to_string(),
                 format: "json".to_string(),
@@ -358,6 +446,7 @@ mod tests {
             },
             channels: ChannelsConfig::default(),
             agent: AgentConfig::default(),
+            orchestration: OrchestrationConfig::default(),
             logging: LoggingConfig::default(),
         };
 
@@ -377,6 +466,7 @@ mod tests {
                 api_key: Some("test".to_string()),
                 ..Default::default()
             },
+            orchestration: OrchestrationConfig::default(),
             logging: LoggingConfig::default(),
         };
 
@@ -393,10 +483,46 @@ mod tests {
                 api_key: Some("test".to_string()),
                 ..Default::default()
             },
+            orchestration: OrchestrationConfig::default(),
             logging: LoggingConfig::default(),
         };
 
         assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_config_validation_invalid_max_workers() {
+        let config = Config {
+            server: ServerConfig::default(),
+            channels: ChannelsConfig::default(),
+            agent: AgentConfig {
+                api_key: Some("test".to_string()),
+                ..Default::default()
+            },
+            orchestration: OrchestrationConfig {
+                enabled: true,
+                max_workers: 0,
+            },
+            logging: LoggingConfig::default(),
+        };
+
+        assert!(config.validate().is_err());
+
+        let config_max = Config {
+            server: ServerConfig::default(),
+            channels: ChannelsConfig::default(),
+            agent: AgentConfig {
+                api_key: Some("test".to_string()),
+                ..Default::default()
+            },
+            orchestration: OrchestrationConfig {
+                enabled: true,
+                max_workers: 6,
+            },
+            logging: LoggingConfig::default(),
+        };
+
+        assert!(config_max.validate().is_err());
     }
 
     #[test]
@@ -417,6 +543,7 @@ mod tests {
             server: ServerConfig::default(),
             channels: ChannelsConfig::default(),
             agent: AgentConfig::default(),
+            orchestration: OrchestrationConfig::default(),
             logging: LoggingConfig::default(),
         };
 
